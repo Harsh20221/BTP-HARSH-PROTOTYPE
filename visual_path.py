@@ -41,6 +41,18 @@ class VisualDetection:
     violence_score: float
 
 
+_BLURRABLE_NUDITY_LABELS = frozenset(
+    {
+        "EXPOSED_ANUS",
+        "EXPOSED_BREAST_F",
+        "EXPOSED_BUTTOCKS",
+        "EXPOSED_GENITALIA_F",
+        "EXPOSED_GENITALIA_M",
+        "EXPOSED_NIPPLES",
+    }
+)
+
+
 class VisualDetector:
     def __init__(self, violence_threshold: float = 0.60) -> None:
         self.nudity_detector = NudeDetector()
@@ -128,12 +140,15 @@ class VisualDetector:
                 width=int(item["box"][2]), height=int(item["box"][3]),
             )
             for item in nudity
-            if float(item.get("score", 0.0)) >= 0.35
+            if str(item.get("class", "")).upper() in _BLURRABLE_NUDITY_LABELS
+            and float(item.get("score", 0.0)) >= 0.35
         )
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         predictions = self.violence_detector(Image.fromarray(rgb_frame))
         violence_predictions = [
-            item for item in predictions if "violence" in str(item["label"]).lower()
+            item
+            for item in predictions
+            if str(item["label"]).strip().lower() in {"violence", "violent"}
         ]
         if not violence_predictions:
             violence_predictions = [item for item in predictions if str(item["label"]).upper() == "LABEL_1"]
