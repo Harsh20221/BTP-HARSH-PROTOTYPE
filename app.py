@@ -15,7 +15,7 @@ def process_uploaded_video(video_path: str) -> str:
 
 demo = gr.Interface(
     fn=process_uploaded_video,
-    inputs=gr.Video(type="filepath"),
+    inputs=gr.Video(),
     outputs=gr.File(),
     title="Long-form video censor",
 )
