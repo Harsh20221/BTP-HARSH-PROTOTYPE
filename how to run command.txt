@@ -1,0 +1,8 @@
+.\.venv\Scripts\Activate.ps1
+python pipeline.py input.mp4 censored.mp4
+
+#WITHOUT ACTIVATION
+.\.venv\Scripts\python.exe pipeline.py input.mp4 censored.mp4
+
+#with ui
+.\.venv\Scripts\python.exe app.py
