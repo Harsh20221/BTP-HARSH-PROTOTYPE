@@ -16,7 +16,7 @@ def process_video(
     input_path: str | Path,
     output_path: str | Path,
     sample_interval: float = 0.5,
-    violence_threshold: float = 0.60,
+    violence_threshold: float = 0.80,
 ) -> Path:
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--sample-interval", type=float, default=0.5)
-    parser.add_argument("--violence-threshold", type=float, default=0.60)
+    parser.add_argument("--violence-threshold", type=float, default=0.80)
     args = parser.parse_args()
     process_video(args.input, args.output, args.sample_interval, args.violence_threshold)
 

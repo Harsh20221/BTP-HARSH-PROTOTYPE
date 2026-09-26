@@ -54,19 +54,30 @@ _BLURRABLE_NUDITY_LABELS = frozenset(
 
 
 class VisualDetector:
-    def __init__(self, violence_threshold: float = 0.60) -> None:
+    def __init__(self, violence_threshold: float = 0.80) -> None:
         self.nudity_detector = NudeDetector()
         model_path = Path(nudenet.__file__).parent / "320n.onnx"
-        self.nudity_detector.onnx_session = onnxruntime.InferenceSession(
-            str(model_path), providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+        session = onnxruntime.InferenceSession(
+            str(model_path),
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
         )
-        if "CUDAExecutionProvider" not in self.nudity_detector.onnx_session.get_providers():
+        self.nudity_detector.onnx_session = session
+        active_providers = self.nudity_detector.onnx_session.get_providers()
+        if "CUDAExecutionProvider" not in active_providers:
             raise RuntimeError(
-                "NudeNet could not initialize CUDAExecutionProvider. Install a CUDA-compatible "
+                "NudeNet could not initialize a GPU execution provider. Install a CUDA-compatible "
                 "onnxruntime-gpu build and NVIDIA driver."
             )
         self.violence_detector = self._load_violence_detector()
         self.violence_threshold = violence_threshold
+
+    @staticmethod
+    def _blood_score(frame) -> float:
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        red_mask = cv2.inRange(hsv, (0, 90, 45), (12, 255, 255))
+        red_mask |= cv2.inRange(hsv, (170, 90, 45), (179, 255, 255))
+        red_ratio = cv2.countNonZero(red_mask) / red_mask.size
+        return min(1.0, red_ratio / 0.20)
 
     @staticmethod
     def _load_violence_detector():
@@ -152,5 +163,6 @@ class VisualDetector:
         ]
         if not violence_predictions:
             violence_predictions = [item for item in predictions if str(item["label"]).upper() == "LABEL_1"]
-        violence_score = max((float(item["score"]) for item in violence_predictions), default=0.0)
+        classifier_score = max((float(item["score"]) for item in violence_predictions), default=0.0)
+        violence_score = max(classifier_score, self._blood_score(frame))
         return VisualDetection(boxes, violence_score)

@@ -83,9 +83,19 @@ def mux_with_muted_audio(
     audio_filter = "volume=1"
     for interval in mute_intervals:
         audio_filter += f",volume=enable='between(t,{interval.start},{interval.end})':volume=0"
-    command = [
-        "ffmpeg", "-y", "-i", str(silent_video_path), "-i", str(original_video_path),
-        "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "libx264", "-preset", "medium",
-        "-pix_fmt", "yuv420p", "-af", audio_filter, "-c:a", "aac", "-shortest", str(output_path),
+    hardware_command = [
+        "ffmpeg", "-y", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
+        "-i", str(silent_video_path), "-i", str(original_video_path),
+        "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "h264_nvenc", "-preset", "p5",
+        "-tune", "hq", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p",
+        "-af", audio_filter, "-c:a", "aac", "-shortest", str(output_path),
     ]
-    subprocess.run(command, check=True)
+    try:
+        subprocess.run(hardware_command, check=True)
+    except subprocess.CalledProcessError:
+        software_command = [
+            "ffmpeg", "-y", "-i", str(silent_video_path), "-i", str(original_video_path),
+            "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "libx264", "-preset", "medium",
+            "-pix_fmt", "yuv420p", "-af", audio_filter, "-c:a", "aac", "-shortest", str(output_path),
+        ]
+        subprocess.run(software_command, check=True)
