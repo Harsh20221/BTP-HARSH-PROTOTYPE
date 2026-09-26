@@ -1,7 +1,7 @@
 # Long-form video censorship pipeline
 
-This is an offline v1 batch pipeline. It samples visual detections every 0.5 seconds, carries
-the latest NudeNet boxes between samples, uses the nearest violence score for each rendered
+This is an offline v1 batch pipeline. It samples visual detections every 0.1 seconds, uses the
+nearest NudeNet boxes and violence score for each rendered
 frame, and mutes profane word intervals from faster-whisper transcription.
 
 ## Prerequisites

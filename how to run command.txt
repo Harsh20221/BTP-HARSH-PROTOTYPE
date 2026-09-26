@@ -5,7 +5,7 @@ python pipeline.py input.mp4 censored.mp4
 .\.venv\Scripts\python.exe pipeline.py input.mp4 censored.mp4
 
 #MORE FREQUENT GPU-BATCHED DETECTION (DEFAULTS TO 0.3 SECONDS)
-\.venv\Scripts\python.exe pipeline.py input.mp4 censored.mp4 --sample-interval 0.3
+.\.venv\Scripts\python.exe pipeline.py input.mp4 censored.mp4 --sample-interval 0.3 --detection-batch-size 16
 
 #with ui
 .\.venv\Scripts\python.exe app.py

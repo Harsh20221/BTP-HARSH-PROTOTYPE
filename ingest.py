@@ -30,15 +30,20 @@ class FramePacket:
 def probe_video(video_path: str | Path) -> VideoMetadata:
     command = [
         "ffprobe", "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,r_frame_rate,nb_frames,duration",
+        "-show_entries", "stream=width,height,r_frame_rate,nb_frames,duration:format=duration",
         "-of", "json", str(video_path),
     ]
     result = subprocess.run(command, check=True, capture_output=True, text=True)
-    stream = json.loads(result.stdout)["streams"][0]
+    payload = json.loads(result.stdout)
+    stream = payload["streams"][0]
     numerator, denominator = (int(part) for part in stream["r_frame_rate"].split("/"))
     fps = numerator / denominator
     frame_count = int(stream.get("nb_frames") or 0)
-    duration = float(stream.get("duration") or (frame_count / fps if frame_count else 0))
+    duration = float(
+        stream.get("duration")
+        or payload.get("format", {}).get("duration")
+        or (frame_count / fps if frame_count else 0)
+    )
     return VideoMetadata(int(stream["width"]), int(stream["height"]), fps, frame_count, duration)
 
 

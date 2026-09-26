@@ -22,7 +22,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from safetensors.torch import load_file
-from transformers import ViTForImageClassification, ViTImageProcessor, pipeline
+from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, pipeline
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,21 @@ class VisualDetector:
         red_mask = cv2.inRange(hsv, (0, 90, 45), (12, 255, 255))
         red_mask |= cv2.inRange(hsv, (170, 90, 45), (179, 255, 255))
         red_ratio = cv2.countNonZero(red_mask) / red_mask.size
+        grid = cv2.resize(red_mask, (8, 8), interpolation=cv2.INTER_AREA) / 255.0
+        global_red_coverage = float((grid >= 0.15).mean())
+        if global_red_coverage >= 0.45:
+            return 0.0
         return min(1.0, red_ratio / 0.20)
+
+    @staticmethod
+    def _is_red_lighting(frame) -> bool:
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        red_mask = cv2.inRange(hsv, (0, 90, 45), (12, 255, 255))
+        red_mask |= cv2.inRange(hsv, (170, 90, 45), (179, 255, 255))
+        red_ratio = cv2.countNonZero(red_mask) / red_mask.size
+        grid = cv2.resize(red_mask, (8, 8), interpolation=cv2.INTER_AREA) / 255.0
+        global_red_coverage = float((grid >= 0.15).mean())
+        return red_ratio >= 0.30 and global_red_coverage >= 0.45
 
     @staticmethod
     def _load_violence_detector():
@@ -90,7 +104,8 @@ class VisualDetector:
 
     @staticmethod
     def _load_converted_vit_pipeline(model_id: str):
-        model = ViTForImageClassification.from_pretrained(model_id)
+        model_config = ViTConfig.from_pretrained(model_id)
+        model = ViTForImageClassification(model_config)
         checkpoint_path = hf_hub_download(model_id, "model.safetensors")
         checkpoint = load_file(checkpoint_path)
         converted = {}
@@ -165,12 +180,23 @@ class VisualDetector:
         if not violence_predictions:
             violence_predictions = [item for item in predictions if str(item["label"]).upper() == "LABEL_1"]
         classifier_score = max((float(item["score"]) for item in violence_predictions), default=0.0)
-        return max(classifier_score, VisualDetector._blood_score(frame))
+        if VisualDetector._is_red_lighting(frame):
+            return 0.0
+        if classifier_score < 0.55:
+            return classifier_score
 
-    def detect_many(self, frames: list) -> list[VisualDetection]:
+        # Treat red as supporting evidence only; red lighting alone must not blur a frame.
+        blood_support = min(0.25, 0.25 * VisualDetector._blood_score(frame))
+        return min(1.0, classifier_score + blood_support)
+
+    def detect_many(self, frames: list, batch_size: int = 16) -> list[VisualDetection]:
+        if not frames:
+            return []
+        if batch_size <= 0:
+            raise ValueError("batch_size must be greater than zero")
         nudity_boxes = [self._detect_nudity(frame) for frame in frames]
         rgb_frames = [Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) for frame in frames]
-        prediction_batches = self.violence_detector(rgb_frames, batch_size=min(8, len(rgb_frames)))
+        prediction_batches = self.violence_detector(rgb_frames, batch_size=min(batch_size, len(rgb_frames)))
         return [
             VisualDetection(boxes, self._violence_score(predictions, frame))
             for frame, boxes, predictions in zip(frames, nudity_boxes, prediction_batches)

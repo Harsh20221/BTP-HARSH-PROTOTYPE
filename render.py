@@ -33,6 +33,25 @@ def _latest_detection(timestamp: float, samples: list[tuple[float, VisualDetecti
     return samples[max(index, 0)][1]
 
 
+def _violence_is_confirmed(
+    timestamp: float,
+    samples: list[tuple[float, VisualDetection]],
+    threshold: float,
+) -> bool:
+    if not samples:
+        return False
+    positions = [item[0] for item in samples]
+    index = bisect.bisect_left(positions, timestamp)
+    index = min(max(index, 0), len(samples) - 1)
+    start = max(0, index - 1)
+    end = min(len(samples), index + 2)
+    positive_samples = sum(
+        detection.violence_score >= threshold
+        for _, detection in samples[start:end]
+    )
+    return positive_samples >= 2
+
+
 def render_video(
     input_path: str | Path,
     silent_video_path: str | Path,
@@ -56,8 +75,8 @@ def render_video(
             if not ok:
                 break
             timestamp = index / fps
-            nudity = _latest_detection(timestamp, samples)
-            violence = _nearest_detection(timestamp, samples)
+            nudity = _nearest_detection(timestamp, samples)
+            violence_confirmed = _violence_is_confirmed(timestamp, samples, violence_threshold)
             if nudity:
                 for box in nudity.nudity_boxes:
                     x1, y1 = max(0, box.x), max(0, box.y)
@@ -65,7 +84,7 @@ def render_video(
                     if x2 > x1 and y2 > y1:
                         region = frame[y1:y2, x1:x2]
                         frame[y1:y2, x1:x2] = cv2.GaussianBlur(region, (0, 0), 25)
-            if violence and violence.violence_score >= violence_threshold:
+            if violence_confirmed:
                 frame = cv2.GaussianBlur(frame, (0, 0), sigmaX=18, sigmaY=18)
             writer.write(frame)
             index += 1
@@ -84,7 +103,7 @@ def mux_with_muted_audio(
     for interval in mute_intervals:
         audio_filter += f",volume=enable='between(t,{interval.start},{interval.end})':volume=0"
     hardware_command = [
-        "ffmpeg", "-y", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
+        "ffmpeg", "-y",
         "-i", str(silent_video_path), "-i", str(original_video_path),
         "-map", "0:v:0", "-map", "1:a:0?", "-c:v", "h264_nvenc", "-preset", "p5",
         "-tune", "hq", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p",
