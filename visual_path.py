@@ -133,7 +133,7 @@ class VisualDetector:
         processor = ViTImageProcessor.from_pretrained(model_id)
         return pipeline("image-classification", model=model, image_processor=processor, device=0)
 
-    def detect(self, frame) -> VisualDetection:
+    def _detect_nudity(self, frame) -> tuple[NudityBox, ...]:
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temporary:
             frame_path = Path(temporary.name)
         try:
@@ -143,7 +143,7 @@ class VisualDetector:
         finally:
             frame_path.unlink(missing_ok=True)
 
-        boxes = tuple(
+        return tuple(
             NudityBox(
                 label=str(item.get("class", "nudity")),
                 score=float(item.get("score", 0.0)),
@@ -154,8 +154,9 @@ class VisualDetector:
             if str(item.get("class", "")).upper() in _BLURRABLE_NUDITY_LABELS
             and float(item.get("score", 0.0)) >= 0.35
         )
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        predictions = self.violence_detector(Image.fromarray(rgb_frame))
+
+    @staticmethod
+    def _violence_score(predictions, frame) -> float:
         violence_predictions = [
             item
             for item in predictions
@@ -164,5 +165,16 @@ class VisualDetector:
         if not violence_predictions:
             violence_predictions = [item for item in predictions if str(item["label"]).upper() == "LABEL_1"]
         classifier_score = max((float(item["score"]) for item in violence_predictions), default=0.0)
-        violence_score = max(classifier_score, self._blood_score(frame))
-        return VisualDetection(boxes, violence_score)
+        return max(classifier_score, VisualDetector._blood_score(frame))
+
+    def detect_many(self, frames: list) -> list[VisualDetection]:
+        nudity_boxes = [self._detect_nudity(frame) for frame in frames]
+        rgb_frames = [Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) for frame in frames]
+        prediction_batches = self.violence_detector(rgb_frames, batch_size=min(8, len(rgb_frames)))
+        return [
+            VisualDetection(boxes, self._violence_score(predictions, frame))
+            for frame, boxes, predictions in zip(frames, nudity_boxes, prediction_batches)
+        ]
+
+    def detect(self, frame) -> VisualDetection:
+        return self.detect_many([frame])[0]

@@ -15,7 +15,7 @@ from visual_path import VisualDetector
 def process_video(
     input_path: str | Path,
     output_path: str | Path,
-    sample_interval: float = 0.5,
+    sample_interval: float = 0.3,
     violence_threshold: float = 0.80,
 ) -> Path:
     input_path = Path(input_path)
@@ -25,9 +25,20 @@ def process_video(
     print(f"Input: {metadata.width}x{metadata.height}, {metadata.fps:.2f} fps, {metadata.duration:.1f}s")
     detector = VisualDetector(violence_threshold)
     samples = []
+    batch_packets = []
+    batch_size = 8
     for packet in iter_sampled_frames(input_path, sample_interval):
-        print(f"Detecting frame at {packet.timestamp:.1f}s")
-        samples.append((packet.timestamp, detector.detect(packet.frame)))
+        batch_packets.append(packet)
+        if len(batch_packets) < batch_size:
+            continue
+        print(f"Detecting frames at {batch_packets[0].timestamp:.1f}s-{batch_packets[-1].timestamp:.1f}s")
+        detections = detector.detect_many([item.frame for item in batch_packets])
+        samples.extend((item.timestamp, detection) for item, detection in zip(batch_packets, detections))
+        batch_packets.clear()
+    if batch_packets:
+        print(f"Detecting frames at {batch_packets[0].timestamp:.1f}s-{batch_packets[-1].timestamp:.1f}s")
+        detections = detector.detect_many([item.frame for item in batch_packets])
+        samples.extend((item.timestamp, detection) for item, detection in zip(batch_packets, detections))
 
     with tempfile.TemporaryDirectory(prefix="video_censor_") as temporary:
         temporary_path = Path(temporary)
@@ -44,7 +55,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Censor nudity, violent frames, and profane speech in a video.")
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
-    parser.add_argument("--sample-interval", type=float, default=0.5)
+    parser.add_argument("--sample-interval", type=float, default=0.3)
     parser.add_argument("--violence-threshold", type=float, default=0.80)
     args = parser.parse_args()
     process_video(args.input, args.output, args.sample_interval, args.violence_threshold)
