@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from audio_path import transcribe_and_find_profanity
+from evaluation import run_benchmark
 from ingest import extract_audio, iter_sampled_frames, probe_video
 from render import mux_with_muted_audio, render_video
 from visual_path import VisualDetector
@@ -57,12 +58,32 @@ def process_video(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Censor nudity, violent frames, and profane speech in a video.")
-    parser.add_argument("input", type=Path)
-    parser.add_argument("output", type=Path)
+    parser.add_argument("input", type=Path, nargs="?")
+    parser.add_argument("output", type=Path, nargs="?")
+    parser.add_argument(
+        "--evaluate",
+        type=Path,
+        metavar="ANNOTATIONS.json",
+        help="benchmark predictions against timestamp annotations instead of rendering a video",
+    )
     parser.add_argument("--sample-interval", type=float, default=0.1)
     parser.add_argument("--violence-threshold", type=float, default=0.80)
     parser.add_argument("--detection-batch-size", type=int, default=16)
+    parser.add_argument("--minimum-iou", type=float, default=0.5)
     args = parser.parse_args()
+    if args.evaluate:
+        if args.input or args.output:
+            parser.error("input and output must be omitted when --evaluate is used")
+        run_benchmark(
+            args.evaluate,
+            sample_interval=args.sample_interval,
+            violence_threshold=args.violence_threshold,
+            detection_batch_size=args.detection_batch_size,
+            minimum_iou=args.minimum_iou,
+        )
+        return
+    if not args.input or not args.output:
+        parser.error("input and output are required unless --evaluate is used")
     process_video(args.input, args.output, args.sample_interval, args.violence_threshold, args.detection_batch_size)
 
 
