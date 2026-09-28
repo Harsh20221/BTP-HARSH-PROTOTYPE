@@ -1,3 +1,5 @@
+
+
 """Stateless one-frame visual detectors."""
 
 from __future__ import annotations
@@ -43,6 +45,15 @@ class VisualDetection:
 
 _BLURRABLE_NUDITY_LABELS = frozenset(
     {
+        "ANUS_EXPOSED",
+        "BUTTOCKS_EXPOSED",
+        "FEMALE_BREAST_EXPOSED",
+        "FEMALE_GENITALIA_EXPOSED",
+        "GENITALIA_FEMALE_EXPOSED",
+        "GENITALIA_MALE_EXPOSED",
+        "MALE_BREAST_EXPOSED",
+        "MALE_GENITALIA_EXPOSED",
+        "NIPPLES_EXPOSED",
         "EXPOSED_ANUS",
         "EXPOSED_BREAST_F",
         "EXPOSED_BUTTOCKS",
@@ -158,17 +169,22 @@ class VisualDetector:
         finally:
             frame_path.unlink(missing_ok=True)
 
-        return tuple(
-            NudityBox(
-                label=str(item.get("class", "nudity")),
-                score=float(item.get("score", 0.0)),
-                x=int(item["box"][0]), y=int(item["box"][1]),
-                width=int(item["box"][2]), height=int(item["box"][3]),
+        boxes = []
+        for item in nudity:
+            label = str(item.get("class", "")).upper()
+            score = float(item.get("score", 0.0))
+            threshold = 0.25 if "GENITALIA" in label else 0.35
+            if label not in _BLURRABLE_NUDITY_LABELS or score < threshold:
+                continue
+            boxes.append(
+                NudityBox(
+                    label=label,
+                    score=score,
+                    x=int(item["box"][0]), y=int(item["box"][1]),
+                    width=int(item["box"][2]), height=int(item["box"][3]),
+                )
             )
-            for item in nudity
-            if str(item.get("class", "")).upper() in _BLURRABLE_NUDITY_LABELS
-            and float(item.get("score", 0.0)) >= 0.35
-        )
+        return tuple(boxes)
 
     @staticmethod
     def _violence_score(predictions, frame) -> float:

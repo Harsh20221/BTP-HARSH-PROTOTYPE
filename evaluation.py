@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -179,6 +180,7 @@ def benchmark(
             ),
         }
         results.append({
+            "video_name": input_path.name,
             "input": str(input_path),
             "duration_seconds": round(metadata.duration, 3),
             "runtime_seconds": round(elapsed, 3),
@@ -206,4 +208,14 @@ def benchmark(
 
 
 def run_benchmark(annotation_path: str | Path, **kwargs: object) -> None:
-    print(json.dumps(benchmark(annotation_path, **kwargs), indent=2))
+    annotation_path = Path(annotation_path)
+    report = benchmark(annotation_path, **kwargs)
+    video_results = report["videos"]
+    if isinstance(video_results, list) and len(video_results) == 1:
+        video_name = Path(str(video_results[0]["video_name"])).stem
+        report_path = annotation_path.parent / f"benchmark_results_{video_name}.json"
+    else:
+        report_path = annotation_path.parent / "benchmark_results.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    print(f"Benchmark report saved to: {report_path}", file=sys.stderr)

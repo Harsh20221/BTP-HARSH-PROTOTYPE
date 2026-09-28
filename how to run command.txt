@@ -9,3 +9,7 @@ python pipeline.py input.mp4 censored.mp4
 
 #with ui
 .\.venv\Scripts\python.exe app.py
+
+#for benchmark
+
+.\.venv\Scripts\python.exe pipeline.py --evaluate violence_annotations.json

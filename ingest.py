@@ -52,7 +52,18 @@ def extract_audio(video_path: str | Path, audio_path: str | Path) -> None:
         "ffmpeg", "-y", "-i", str(video_path), "-vn", "-acodec", "pcm_s16le",
         "-ar", "16000", "-ac", "1", str(audio_path),
     ]
-    subprocess.run(command, check=True)
+    result = subprocess.run(command, check=False)
+    if result.returncode == 0:
+        return
+
+    metadata = probe_video(video_path)
+    silent_command = [
+        "ffmpeg", "-y", "-f", "lavfi", "-i",
+        "anullsrc=channel_layout=mono:sample_rate=16000",
+        "-t", str(max(metadata.duration, 0.1)), "-acodec", "pcm_s16le",
+        "-ar", "16000", "-ac", "1", str(audio_path),
+    ]
+    subprocess.run(silent_command, check=True)
 
 
 def iter_frames(video_path: str | Path) -> Iterator[FramePacket]:
